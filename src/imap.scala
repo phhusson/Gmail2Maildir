@@ -343,7 +343,7 @@ class Imaps {
       s"$timestamp.$uid.$gm_msgid:2,$translatedFlags"
    }
 
-	def fetchMail(requestedUid: String): Option[String] = {
+	def downloadMail(requestedUid: String): Option[String] = {
       import scala.util.matching.Regex._
 
       val mailInfos = fetchUid(requestedUid, "(X-GM-MSGID X-GM-LABELS UID FLAGS)").toList

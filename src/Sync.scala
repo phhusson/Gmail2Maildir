@@ -28,7 +28,7 @@ object Sync {
 		}
 
 		def downloadMail(uid: Integer, i: Imaps) = {
-			i.fetchMail(uid.toString)
+			i.downloadMail(uid.toString)
 		}
 
 		def initSync(uid: Integer, i: Imaps, knownIds: Set[Int]) {
