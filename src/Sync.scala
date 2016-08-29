@@ -175,7 +175,9 @@ object Sync {
 					nextId-=1
 					idUidMap -= nextId
 				} else if(line._1 == "FETCH") {
-					fifo.enqueue( (idUidMap(line._2.toInt), 'Sync) )
+					scala.util.Try {
+						fifo.enqueue( (idUidMap(line._2.toInt), 'Sync) )
+					}
 				}
 				println(line)
 			}
