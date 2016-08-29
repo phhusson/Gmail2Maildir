@@ -1,5 +1,5 @@
 /* vim: noai:ts=3:sw=3
-*/
+ */
 package me.phh.imap
 
 import collection.JavaConversions._
@@ -62,15 +62,15 @@ object Sync {
 						case (uid, 'Remove) =>
 						case (uid, 'Sync) =>
 							syncMail(uid, i)
-					}
-					true
-				} catch {
-					//Erm imap connection is dead...
-					//Re-enqueue the operation
-					case e: java.io.EOFException =>
-						println("IMAP connection closed, requeueing operation")
-						ops.enqueue(op)
-						false
+							}
+							true
+						} catch {
+							//Erm imap connection is dead...
+							//Re-enqueue the operation
+						case e: java.io.EOFException =>
+							println("IMAP connection closed, requeueing operation")
+							ops.enqueue(op)
+							false
 				}
 			}.takeWhile( (v: Boolean) => v ).toList
 		}
@@ -96,11 +96,11 @@ object Sync {
 		import scala.util.matching.Regex._
 		val regex = raw"[0-9]+\.([0-9]+)\.[0-9]+.*".r
 		val r: Set[Int] = folder.list().map{ fileName =>
-			regex.findFirstMatchIn(fileName) match {
-				case Some(m) => m.group(1).toInt
-				case None => -1
-			}
-		}.toSet
+				regex.findFirstMatchIn(fileName) match {
+					case Some(m) => m.group(1).toInt
+					case None => -1
+				}
+			}.toSet
 		r
 	}
 
@@ -129,6 +129,7 @@ object Sync {
 					getUid.findFirstMatchIn(line)
 						.map( _.group(2))
 						.get
+
 				fifo.enqueue( (uid.toInt, 'InitSync) )
 
 				idUidMap(id.toInt) = uid.toInt
@@ -160,8 +161,8 @@ object Sync {
 						val r = conn.fetch(v, "(UID)").toList
 						val getUid = raw"\(UID ([0-9]*)\)".r
 						val uid = r.flatMap { line =>
-								getUid.findFirstMatchIn(line)
-									.map( _.group(1))
+							getUid.findFirstMatchIn(line)
+								.map( _.group(1))
 						}.head
 
 

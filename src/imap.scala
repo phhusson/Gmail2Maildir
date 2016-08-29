@@ -83,15 +83,15 @@ class Imaps {
 
 		val exists =
 			res.flatMap( _.split(imapDelimiter) match {
-					case Array("*", n, "EXISTS", _*) => Some(n.toInt)
-					case _ => None
-				})
+				case Array("*", n, "EXISTS", _*) => Some(n.toInt)
+				case _ => None
+			})
 
 		val recent =
 			res.flatMap( _.split(imapDelimiter) match {
-					case Array("*", n, "RECENT", _*) => Some(n.toInt)
-					case _ => None
-				})
+				case Array("*", n, "RECENT", _*) => Some(n.toInt)
+				case _ => None
+			})
 
 		for(line <- res)
 			println(line)
@@ -178,10 +178,10 @@ class Imaps {
 				//This means a new message appeared
 				case Array("*", id, "EXISTS") =>
 					("EXISTS", id)
-				//This means some flags changed
+					//This means some flags changed
 				case Array("*", id, "FETCH", _*) =>
 					("FETCH", id)
-				//This means a message has been deleted
+					//This means a message has been deleted
 				case Array("*", id, "EXPUNGE") =>
 					("EXPUNGE", id)
 				case _ =>
@@ -198,31 +198,33 @@ class Imaps {
 
 	case class Leaf(val str: String) extends Tree {
 		def ::(newTree: Tree) =
-         new Node(List(newTree, this))
+			new Node(List(newTree, this))
 	}
 
 	case class Node(val elems: List[Tree]) extends Tree {
 		def ::(tree: Tree) =
-         new Node(tree :: elems)
-      override def toString() =
-         "Node("+elems.mkString(", ")+")"
-      def apply(n: Int) = elems(n)
+			new Node(tree :: elems)
+
+		override def toString() =
+			"Node("+elems.mkString(", ")+")"
+
+		def apply(n: Int) = elems(n)
 	}
 
 	case class FinishedNode(val elems: List[Tree]) extends Tree {
 		def ::(tree: Tree) =
-         new Node(tree :: List(this))
+			new Node(tree :: List(this))
 
-      override def toString() =
-         "FinishedNode("+elems.mkString(", ")+")"
+		override def toString() =
+			"FinishedNode("+elems.mkString(", ")+")"
 
-      def apply(n: Int) = elems(n)
+		def apply(n: Int) = elems(n)
 	}
 
 	//I think this function is much much too complicated for what it does...
 	def splitAnswer(s: String) = {
 		import scala.util.matching.Regex._
-		
+
 		//Just want to now the depth every character is at, with which start-of-sequence character
 		val stacks = s.scanLeft(List.empty[Char]) { (stack, c) =>
 			if(c == '(') {
@@ -249,33 +251,32 @@ class Imaps {
 
 		def split(v: Seq[Tuple2[Char, Seq[Char]]], env: Char = '+'): Tree = {
 			val (prefix, suffix) = v.span{ case (char, s) =>
-            if(s.isEmpty && env != '"')
-               char != ' '
-            else
-               true
-         }
+				if(s.isEmpty && env != '"')
+					char != ' '
+				else
+					true
+			}
 
-         val prefixTree =
-            if(!prefix.find(_._2.filter( _ != '\\').length != 0).isEmpty) {
-               val separator = prefix.head._1
-               val prefixFiltered = prefix.filter(_._2.filter( _ != '\\').length >= 1).dropRight(1)
-               val r = split(prefixFiltered.map{ case (char, stack) => (char, stack.dropRight(1)) }, separator)
-               r match {
-                  case r: Node => new FinishedNode(r.elems)
-                  case r: FinishedNode => r // This helps have only one depth when doing (( ))
-                  case r: Leaf => r
-               }
+			val prefixTree =
+				if(!prefix.find(_._2.filter( _ != '\\').length != 0).isEmpty) {
+					val separator = prefix.head._1
+					val prefixFiltered = prefix.filter(_._2.filter( _ != '\\').length >= 1).dropRight(1)
+					val r = split(prefixFiltered.map{ case (char, stack) => (char, stack.dropRight(1)) }, separator)
+					r match {
+						case r: Node => new FinishedNode(r.elems)
+						case r: FinishedNode => r // This helps have only one depth when doing (( ))
+						case r: Leaf => r
+					}
 				} else {
-               val str = prefix.map(_._1).mkString
-               new Leaf(str)
+					val str = prefix.map(_._1).mkString
+					new Leaf(str)
 				}
 
-			 if(suffix.isEmpty)
-				 prefixTree
-			 else {
-				 prefixTree :: split(suffix.tail)
-			 }
-
+			if(suffix.isEmpty) {
+				prefixTree
+			} else {
+				prefixTree :: split(suffix.tail)
+			}
 		}
 		split(s zip stacks)
 	}
@@ -306,7 +307,7 @@ class Imaps {
 		conn = socketSsl
 
 		connSource = io.Source.fromInputStream(is)
-      connLines = connSource.getLines
+		connLines = connSource.getLines
 		connSink = new java.io.PrintWriter(os, false)
 		connIS = is
 
@@ -325,28 +326,28 @@ class Imaps {
 		val os = new DeflaterOutputStream(conn.getOutputStream, new Deflater(Deflater.BEST_COMPRESSION, true /*RFC1591*/), true /* also flush compressor */)
 
 		connSource = io.Source.createBufferedSource(is, 2 /* Don't try to bufferize, Deflater is already bufferized*/)(io.Codec.UTF8)
-      connLines = connSource.getLines
+		connLines = connSource.getLines
 		connSink = new java.io.PrintWriter(os, false)
-      connIS = is
+		connIS = is
 	}
 
-   def mailFilename(uid: String, gm_msgid: String, flags: List[String]) = {
-      val timestamp: Long = System.currentTimeMillis / 1000
-      val translatedFlags = flags.flatMap{
-         case "\\Answered" => List('R')
-         case "\\Flagged" => List('F')
-         case "\\Draft" => List('D')
-         case "\\Deleted" => List('T')
-         case "\\Seen" => List('S')
-         case _ => List()
-      }.sorted.mkString
-      s"$timestamp.$uid.$gm_msgid:2,$translatedFlags"
-   }
+	def mailFilename(uid: String, gm_msgid: String, flags: List[String]) = {
+		val timestamp: Long = System.currentTimeMillis / 1000
+		val translatedFlags = flags.flatMap{
+			case "\\Answered" => List('R')
+			case "\\Flagged" => List('F')
+			case "\\Draft" => List('D')
+			case "\\Deleted" => List('T')
+			case "\\Seen" => List('S')
+			case _ => List()
+		}.sorted.mkString
+		s"$timestamp.$uid.$gm_msgid:2,$translatedFlags"
+	}
 
 	def downloadMail(requestedUid: String): Option[String] = {
-      import scala.util.matching.Regex._
+		import scala.util.matching.Regex._
 
-      val mailInfos = fetchUid(requestedUid, "(X-GM-MSGID X-GM-LABELS UID FLAGS)").toList
+		val mailInfos = fetchUid(requestedUid, "(X-GM-MSGID X-GM-LABELS UID FLAGS)").toList
 		println("Got mailInfos = " + mailInfos)
 		val answerLineOpt = mailInfos.find( l=> l.contains("FETCH") && l.contains(s"UID $requestedUid"))
 		if(answerLineOpt.isEmpty)
@@ -354,60 +355,60 @@ class Imaps {
 
 		val answerLine = answerLineOpt.get
 
-      val elems =
+		val elems =
 			splitAnswer(mailInfos(0)).asInstanceOf[Node](3).asInstanceOf[FinishedNode].elems
 
-      val msgid = (elems zip elems.tail).flatMap {
-         case (Leaf("X-GM-MSGID"), Leaf(tagValue)) => List(tagValue)
-         case _ => List()
-      }.head
+		val msgid = (elems zip elems.tail).flatMap {
+			case (Leaf("X-GM-MSGID"), Leaf(tagValue)) => List(tagValue)
+			case _ => List()
+		}.head
 
-      val uid = (elems zip elems.tail).flatMap {
-         case (Leaf("UID"), Leaf(tagValue)) => List(tagValue)
-         case _ => List()
-      }.head
+		val uid = (elems zip elems.tail).flatMap {
+			case (Leaf("UID"), Leaf(tagValue)) => List(tagValue)
+			case _ => List()
+		}.head
 
-      val flags = (elems zip elems.tail).flatMap {
-         case (Leaf("FLAGS"), e: Leaf) => List(e)
-         case (Leaf("FLAGS"), FinishedNode(e)) => e
-         case _ => List()
-      }.map{ case Leaf(tag) => tag; case _ => "" }
+		val flags = (elems zip elems.tail).flatMap {
+			case (Leaf("FLAGS"), e: Leaf) => List(e)
+			case (Leaf("FLAGS"), FinishedNode(e)) => e
+			case _ => List()
+		}.map{ case Leaf(tag) => tag; case _ => "" }
 
-      val labels = (elems zip elems.tail).flatMap {
-         case (Leaf("X-GM-LABELS"), e: Leaf) => List(e)
-         case (Leaf("X-GM-LABELS"), FinishedNode(e)) => e
-         case _ => List()
-      }.map{case Leaf(label) => label; case _ => "" }
-	   .map{ _.replace("\\\\", "\\")}
+		val labels = (elems zip elems.tail).flatMap {
+				case (Leaf("X-GM-LABELS"), e: Leaf) => List(e)
+				case (Leaf("X-GM-LABELS"), FinishedNode(e)) => e
+				case _ => List()
+			}.map{case Leaf(label) => label; case _ => "" }
+			 .map{ _.replace("\\\\", "\\")}
 
-      sendCommand("M", s"UID FETCH $uid (RFC822)")
+		sendCommand("M", s"UID FETCH $uid (RFC822)")
 
-	  val iter = Iterator.continually(connIS.read())
-	  val part1 = iter.takeWhile( _ != '\r').map(_.toChar).toList.mkString
-	  iter.next // Consume \n
+		val iter = Iterator.continually(connIS.read())
+		val part1 = iter.takeWhile( _ != '\r').map(_.toChar).toList.mkString
+		iter.next // Consume \n
 
-      val getSize = raw"RFC822 \{([0-9]*)\}".r
-      val size = getSize.findFirstMatchIn(part1)
-         .map( _.group(1))
-         .get
-         .toInt
-	println(s"Retrieving message $requestedUid, size $size")
+		val getSize = raw"RFC822 \{([0-9]*)\}".r
+		val size = getSize.findFirstMatchIn(part1)
+			.map( _.group(1))
+			.get
+			.toInt
+		println(s"Retrieving message $requestedUid, size $size")
 
-	val msg = iter.take(size).map(_.toChar).toList.mkString
-      
-      val msgStr = msg.mkString
+		val msg = iter.take(size).map(_.toChar).toList.mkString
 
-      val filename = mailFilename(uid, msgid, flags)
-	  new java.io.PrintWriter(s"maildir/cur/$filename") {
-		  try {
-			  write("X-Keywords: " + labels.mkString(",") + "\r\n")
-			  write(msgStr)
-		  } finally {
-			  close()
-		  }
-	  }
+		val msgStr = msg.mkString
 
-      waitForResult("M").toList
+		val filename = mailFilename(uid, msgid, flags)
+		new java.io.PrintWriter(s"maildir/cur/$filename") {
+			try {
+				write("X-Keywords: " + labels.mkString(",") + "\r\n")
+				write(msgStr)
+			} finally {
+				close()
+			}
+		}
+
+		waitForResult("M").toList
 		return Some(filename)
 	}
 }
