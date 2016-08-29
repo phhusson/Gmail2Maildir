@@ -27,7 +27,7 @@ object Sync {
 		def syncMail(uid: Integer, i: Imaps) {
 		}
 
-		def downloadMail(uid: Integer, i: Imaps) {
+		def downloadMail(uid: Integer, i: Imaps) = {
 			i.fetchMail(uid.toString)
 		}
 
@@ -50,7 +50,15 @@ object Sync {
 						case (uid, 'InitSync) =>
 							initSync(uid, i, knownIds)
 						case (uid, 'Download) =>
-							downloadMail(uid, i)
+							val res = downloadMail(uid, i)
+							//Block thread for 500ms and retry
+							if(res.isEmpty) {
+								println(s"Couldn't get mail $uid, retrying...")
+								Thread.sleep(500)
+								ops.enqueue(op)
+							} else {
+								//Sync mu DB
+							}
 						case (uid, 'Remove) =>
 						case (uid, 'Sync) =>
 							syncMail(uid, i)

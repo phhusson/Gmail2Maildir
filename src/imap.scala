@@ -343,12 +343,16 @@ class Imaps {
       s"$timestamp.$uid.$gm_msgid:2,$translatedFlags"
    }
 
-	def fetchMail(requestedUid: String) = {
+	def fetchMail(requestedUid: String): Option[String] = {
       import scala.util.matching.Regex._
 
       val mailInfos = fetchUid(requestedUid, "(X-GM-MSGID X-GM-LABELS UID FLAGS)").toList
 		println("Got mailInfos = " + mailInfos)
-		val answerLine = mailInfos.find( l=> l.contains("FETCH") && l.contains(s"UID $requestedUid")).get
+		val answerLineOpt = mailInfos.find( l=> l.contains("FETCH") && l.contains(s"UID $requestedUid"))
+		if(answerLineOpt.isEmpty)
+			return None
+
+		val answerLine = answerLineOpt.get
 
       val elems =
 			splitAnswer(mailInfos(0)).asInstanceOf[Node](3).asInstanceOf[FinishedNode].elems
@@ -404,5 +408,6 @@ class Imaps {
 	  }
 
       waitForResult("M").toList
+		return Some(filename)
 	}
 }
