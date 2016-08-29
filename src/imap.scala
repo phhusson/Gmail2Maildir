@@ -3,6 +3,11 @@
 
 package me.phh.imap
 
+object Imaps {
+	type FlagList = Array[String]
+	type FolderInfos = (Option[FlagList], Option[FlagList], Option[Int], Option[Int], Option[Int], Option[Int])
+}
+
 class Imaps {
 	var conn: java.net.Socket = null
 
@@ -50,7 +55,7 @@ class Imaps {
 		println(waitForResult("V").toList)
 	}
 
-	def parseFlags(line: Option[String]) = {
+	def parseFlags(line: Option[String]): Option[Imaps.FlagList] = {
 		line.flatMap(_.split(raw"(\(|\))") match {
 			case Array(_, flags, _*) =>
 				Some(flags.split(" "))
@@ -60,7 +65,7 @@ class Imaps {
 	}
 
 	val imapDelimiter = raw"( |\[|\])"
-	def examine(folder: String) = {
+	def examine(folder: String):  Imaps.FolderInfos = {
 		sendCommand("F", "EXAMINE \""+folder+"\"")
 		val res = waitForResult("F").toList
 
@@ -95,7 +100,7 @@ class Imaps {
 
 		for(line <- res)
 			println(line)
-		(flags, permanentFlags, uidValidity, exists, recent, uidNext)
+		(flags, permanentFlags, uidValidity, exists.headOption, recent.headOption, uidNext)
 	}
 
 	def idle(timeout: Int, keep: Boolean = true): Iterator[(String, String)] = {
@@ -344,6 +349,35 @@ class Imaps {
 		s"$timestamp.$uid.$gm_msgid:2,$translatedFlags"
 	}
 
+	def fetchMailRFC822(uid: String): Option[String] = {
+		sendCommand("M", s"UID FETCH $uid (RFC822)")
+
+		val iter = Iterator.continually(connIS.read())
+		val part1 = iter.takeWhile( _ != '\r').map(_.toChar).toList.mkString
+		iter.next // Consume \n
+
+		val getSize = raw"RFC822 \{([0-9]*)\}".r
+		val sizeOpt = getSize.findFirstMatchIn(part1)
+			.map( _.group(1)).map(_.toInt)
+
+		sizeOpt match {
+			case Some(size: Int) =>
+				println(s"Retrieving message $uid, size $size")
+				val msg = iter.take(size).map(_.toChar).toList.mkString
+				waitForResult("M").toList
+				Some(msg)
+			case None =>
+				if(part1.startsWith("M ")) {
+					//We already got our end of command
+					None
+				} else {
+					//Wasit for end of command
+					waitForResult("M").toList
+					None
+				}
+		}
+	}
+
 	def downloadMail(requestedUid: String): Option[String] = {
 		import scala.util.matching.Regex._
 
@@ -381,34 +415,18 @@ class Imaps {
 			}.map{case Leaf(label) => label; case _ => "" }
 			 .map{ _.replace("\\\\", "\\")}
 
-		sendCommand("M", s"UID FETCH $uid (RFC822)")
-
-		val iter = Iterator.continually(connIS.read())
-		val part1 = iter.takeWhile( _ != '\r').map(_.toChar).toList.mkString
-		iter.next // Consume \n
-
-		val getSize = raw"RFC822 \{([0-9]*)\}".r
-		val size = getSize.findFirstMatchIn(part1)
-			.map( _.group(1))
-			.get
-			.toInt
-		println(s"Retrieving message $requestedUid, size $size")
-
-		val msg = iter.take(size).map(_.toChar).toList.mkString
-
-		val msgStr = msg.mkString
-
-		val filename = mailFilename(uid, msgid, flags)
-		new java.io.PrintWriter(s"maildir/cur/$filename") {
-			try {
-				write("X-Keywords: " + labels.mkString(",") + "\r\n")
-				write(msgStr)
-			} finally {
-				close()
+		val msgOpt = fetchMailRFC822(uid)
+		msgOpt.flatMap{ msg =>
+			val filename = mailFilename(uid, msgid, flags)
+			new java.io.PrintWriter(s"maildir/cur/$filename") {
+				try {
+					write("X-Keywords: " + labels.mkString(",") + "\r\n")
+					write(msg)
+				} finally {
+					close()
+				}
 			}
+			Some(filename)
 		}
-
-		waitForResult("M").toList
-		return Some(filename)
 	}
 }

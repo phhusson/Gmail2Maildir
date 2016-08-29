@@ -40,8 +40,57 @@ object Sync {
 				downloadMail(uid, i)
 			}
 		}
+		def idle(conn: Imaps, folder: Imaps.FolderInfos) {
+			var nextId = folder._4.head+1
+			var nextUid = folder._6.head
+			while(true) {
+				for(line <- conn.idle(25*60*1000, false)) {
+					if(line._1 == "EXISTS") {
+						//It is possible to receive more than one mail at a time here
+						val id = line._2.toInt
+						val newNextId = line._2.toInt+1
+						val nNew = newNextId - nextId
+						println(s"Got $nNew new mails")
+						for(i <- nextId to id) {
+							val v = i.toString
+							val r = conn.fetch(v, "(UID)").toList
+							val getUid = raw"\(UID ([0-9]*)\)".r
+							val uid = r.flatMap { line =>
+								getUid.findFirstMatchIn(line)
+									.map( _.group(1))
+							}.head
 
-		def downloadMails(ops: FIFOStream[MailOperation], i: Imaps, knownIds: Set[Int]) {
+
+							println(s"Guessed UID was $nextUid, got $uid")
+							if(nextUid != uid.toInt) println("-----------------------------")
+							nextUid = uid.toInt+1
+							fifo.enqueue( (uid.toInt, 'Download) )
+							idUidMap(i) = uid.toInt
+						}
+						nextId = newNextId
+					} else if(line._1 == "EXPUNGE") {
+						//Expunge always only delete one mail at a time
+						val id = line._2.toInt
+						val deadUid = idUidMap(id)
+						fifo.enqueue( (deadUid, 'Remove) )
+
+						//This shit is expensive...
+						for(i <- (nextId-1) to (id+1) by -1) {
+							idUidMap(i-1) = idUidMap(i)
+						}
+						nextId-=1
+						idUidMap -= nextId
+					} else if(line._1 == "FETCH") {
+						scala.util.Try {
+							fifo.enqueue( (idUidMap(line._2.toInt), 'Sync) )
+						}
+					}
+					println(line)
+				}
+			}
+		}
+
+		def downloadMails(ops: FIFOStream[MailOperation], i: Imaps, knownIds: Set[Int], folder: Imaps.FolderInfos) {
 			val threadID = Thread.currentThread().getId()
 
 			ops.toStream.map{ op =>
@@ -62,12 +111,13 @@ object Sync {
 						case (uid, 'Remove) =>
 						case (uid, 'Sync) =>
 							syncMail(uid, i)
-							}
-							true
-						} catch {
-							//Erm imap connection is dead...
-							//Re-enqueue the operation
-						case e: java.io.EOFException =>
+						case (_, 'Idle) => idle(i, folder)
+					}
+					true
+				} catch {
+					//Erm imap connection is dead...
+					//Re-enqueue the operation
+					case e: java.io.EOFException =>
 							println("IMAP connection closed, requeueing operation")
 							ops.enqueue(op)
 							false
@@ -76,16 +126,16 @@ object Sync {
 		}
 	}
 
-	class ImapConnectionThread(val ops: FIFOStream[MailOperation], val knownIds: Set[Int]) extends Thread {
+	class ImapConnectionThread(val ops: FIFOStream[MailOperation], val knownIds: Set[Int], val auth: Tuple2[String, String]) extends Thread {
 		override def run() {
 			while(true) {
 				val conn = new Imaps()
 				conn.connect("imap.gmail.com", 993)
-				conn.login("phhusson@gmail.com", "ervyzmoxbgzhpegw")
+				conn.login(auth._1, auth._2)
 				conn.compress()
 
 				val folder = conn.examine("[Gmail]/Tous les messages")
-				ImapConnectionThread.downloadMails(ops, conn, knownIds)
+				ImapConnectionThread.downloadMails(ops, conn, knownIds, folder)
 			}
 		}
 	}
@@ -141,57 +191,10 @@ object Sync {
 		println("Done enqueuing mails")
 
 		println("Starting fetcher threads")
-		val threads = (1 to 2).map( v => new ImapConnectionThread(fifo, knownUids))
+		val threads = (1 to 2).map( v => new ImapConnectionThread(fifo, knownUids, (args(0), args(1))))
 		threads.foreach(_.start())
 
-		//ImapConnectionThread.downloadMails(fifo, conn, knownIds)
-		var nextId = folder._4.head+1
-		var nextUid = folder._6.head
-
-		while(true) {
-			for(line <- conn.idle(25*60*1000, false)) {
-				if(line._1 == "EXISTS") {
-					//It is possible to receive more than one mail at a time here
-					val id = line._2.toInt
-					val newNextId = line._2.toInt+1
-					val nNew = newNextId - nextId
-					println(s"Got $nNew new mails")
-					for(i <- nextId to id) {
-						val v = i.toString
-						val r = conn.fetch(v, "(UID)").toList
-						val getUid = raw"\(UID ([0-9]*)\)".r
-						val uid = r.flatMap { line =>
-							getUid.findFirstMatchIn(line)
-								.map( _.group(1))
-						}.head
-
-
-						println(s"Guessed UID was $nextUid, got $uid")
-						if(nextUid != uid.toInt) println("-----------------------------")
-						nextUid = uid.toInt+1
-						fifo.enqueue( (uid.toInt, 'Download) )
-						idUidMap(i) = uid.toInt
-					}
-					nextId = newNextId
-				} else if(line._1 == "EXPUNGE") {
-					//Expunge always only delete one mail at a time
-					val id = line._2.toInt
-					val deadUid = idUidMap(id)
-					fifo.enqueue( (deadUid, 'Remove) )
-
-					//This shit is expensive...
-					for(i <- (nextId-1) to (id+1) by -1) {
-						idUidMap(i-1) = idUidMap(i)
-					}
-					nextId-=1
-					idUidMap -= nextId
-				} else if(line._1 == "FETCH") {
-					scala.util.Try {
-						fifo.enqueue( (idUidMap(line._2.toInt), 'Sync) )
-					}
-				}
-				println(line)
-			}
-		}
+		fifo.enqueue( (-1, 'Idle) )
+		ImapConnectionThread.downloadMails(fifo, conn, knownUids, folder)
 	}
 }
