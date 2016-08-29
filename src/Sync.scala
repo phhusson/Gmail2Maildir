@@ -44,7 +44,7 @@ object Sync {
 		def downloadMails(ops: FIFOStream[MailOperation], i: Imaps, knownIds: Set[Int]) {
 			val threadID = Thread.currentThread().getId()
 
-			for(op <- ops.toStream) {
+			ops.toStream.map{ op =>
 				try {
 					op match {
 						case (uid, 'InitSync) =>
@@ -55,14 +55,16 @@ object Sync {
 						case (uid, 'Sync) =>
 							syncMail(uid, i)
 					}
+					true
 				} catch {
 					//Erm imap connection is dead...
 					//Re-enqueue the operation
 					case e: java.io.EOFException =>
 						println("IMAP connection closed, requeueing operation")
 						ops.enqueue(op)
+						false
 				}
-			}
+			}.takeWhile( (v: Boolean) => v ).toList
 		}
 	}
 
